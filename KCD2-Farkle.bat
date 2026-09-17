@@ -16,7 +16,7 @@ echo No Python found, so opening the page directly.
 echo The search will use one core instead of all of them. Install Python from
 echo https://www.python.org/downloads/ to get the parallel version.
 echo.
-start "" "KCD2-Dice-Calculator.html"
+start "" "index.html"
 timeout /t 4 >nul
 exit /b
 

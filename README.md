@@ -2,7 +2,10 @@
 
 An exact solver for the dice mini-game (Farkle) in *Kingdom Come: Deliverance II*.
 
-**Double-click `KCD2-Farkle.bat`**, or just open `KCD2-Dice-Calculator.html` in a browser. One HTML
+**Use it online: https://gaetarra.github.io/kcd2-dice-calculator/** — nothing to install, and the
+search uses every CPU core.
+
+To run it locally, **double-click `KCD2-Farkle.bat`**, or just open `index.html` in a browser. One HTML
 file, no dependencies, no build step.
 
 The batch file only exists to serve the page over `http://127.0.0.1`: Chrome and Edge refuse to start

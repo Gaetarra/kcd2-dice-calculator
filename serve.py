@@ -11,7 +11,7 @@ import os
 import threading
 import webbrowser
 
-PAGE = "KCD2-Dice-Calculator.html"
+PAGE = "index.html"
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), http.server.SimpleHTTPRequestHandler)
