@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.bak
+
+# The full label set (all 2,324,784 loadouts) is attached to the GitHub release
+# rather than committed, so clones stay small.
+kcd2farkle/_labels_full.npz
+kcd2farkle/*.tmp.npz
+kcd2farkle/_labels_progress.txt
+
+# Training byproducts. The shipped network's weights live inside the HTML page.
+kcd2farkle/_canon.json
+kcd2farkle/_nn_*
+kcd2farkle/_surrogate_*_full.npz
