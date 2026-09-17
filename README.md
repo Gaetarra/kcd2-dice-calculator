@@ -47,12 +47,19 @@ Because every legal keep scores at least 50, the recursion only ever refers to a
 banked total. Sweeping the points grid downwards therefore makes every lookup land on a value that is
 already final — one exact pass, no value iteration, no convergence tolerance.
 
-### The match target is the whole endgame
+### Points per turn, or play to a match target
 
-The turn value is capped at the match target, because points past it do not help you win. That is what
-actually ends a turn. Needing 100 and throwing a single 1, it banks and wins rather than chasing EV;
-holding 1100 of the 1500 you need with one die left, it banks, because throwing that die is worth 459.
-Set the target to ~20000 for a plain uncapped points-per-turn ranking.
+A switch at the top picks what to optimise for. **Points per turn** (the default) maximises the average
+a turn banks. That's the number to rank dice by in general.
+
+**Match target** caps each turn's value at the points you still need, because points past the target do
+not help you win. That is what actually ends a turn in the endgame. On 1400 of a 1500 match, keeping a
+single 1 banks and wins, where points per turn would throw again. Holding 1100 of the 1500 you need
+with one die left, it banks, because throwing that die is worth 459.
+
+Points per turn is the same solver with a target of 20000, which no turn gets near. Solves cost roughly
+in proportion to the target, so it is about 5x slower per set than a 1500-2000 match; the
+accelerator keeps big searches fast either way.
 
 ### Speed
 

@@ -50,6 +50,11 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 @media (max-width:430px){.rollrow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .note{color:var(--dim);font-size:12px;margin-top:10px}
 .hide{display:none}
+.seg{display:inline-flex}
+.seg button{cursor:pointer;color:var(--dim);border-radius:0;padding:6px 12px}
+.seg button:first-child{border-radius:4px 0 0 4px}
+.seg button:last-child{border-radius:0 4px 4px 0;margin-left:-1px}
+.seg button.on{background:var(--gold);color:#20180c;border-color:var(--gold);font-weight:600}
 .ok{color:var(--good)}.err{color:var(--bad)}
 </style>
 </head>
@@ -58,10 +63,11 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 <h1>KCD2 Dice Calculator</h1>
 <p class="sub">Farkle solver for Kingdom Come: Deliverance II &mdash; all 43 dice at their exact face weights, exact combination scoring, exact optimal play.</p>
 <div class="panel" style="padding:10px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-  <b style="color:var(--gold);font:600 13px Georgia,serif;letter-spacing:.05em">MATCH TARGET</b>
-  <label style="font-size:13px">first to <input type="number" id="target" value="2000" min="100" max="20000" step="50" list="targets" style="width:80px"> points</label>
+  <b style="color:var(--gold);font:600 13px Georgia,serif;letter-spacing:.05em">PLAY FOR</b>
+  <span class="seg"><button id="modePts" class="on">Points per turn</button><button id="modeMatch">Match target</button></span>
+  <label id="targetwrap" class="hide" style="font-size:13px">first to <input type="number" id="target" value="2000" min="100" max="20000" step="50" list="targets" style="width:80px"> points</label>
   <datalist id="targets"><option value="1500"><option value="2000"><option value="2500"><option value="4000"></datalist>
-  <span class="pct">points past the target don't help you, so this is what decides every score-or-pass call. Raise it to ~20000 for a pure points-per-turn ranking.</span>
+  <span class="pct" id="modehint">the most points a turn banks on average. Switch to Match target when you are playing to win a game: points past the target don't help you, which changes score-or-pass calls near the end.</span>
 </div>
 
 <div class="tabs">
@@ -111,7 +117,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
     <h2>Current throw</h2>
     <div class="rollrow" id="rollrow"></div>
     <div style="margin-top:12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-      <label style="font-size:13px">My score: <input type="number" id="myscore" value="0" min="0" max="20000" step="50" style="width:84px"></label>
+      <label id="myscorewrap" class="hide" style="font-size:13px">My score: <input type="number" id="myscore" value="0" min="0" max="20000" step="50" style="width:84px"></label>
       <label style="font-size:13px">Banked this turn: <input type="number" id="turnpts" value="0" min="0" max="20000" step="50" style="width:84px"></label>
       <button class="go" id="advise">Advise</button>
       <span id="prog2" class="pct"></span>
@@ -590,7 +596,12 @@ function fanOut(ws,jobs){
 }
 
 /* --- mode 1 --- */
-function target(){ return Math.max(100,Math.min(20000,parseInt($("target").value,10)||2000)); }
+/* Points per turn is the same solver with a target no turn gets near: value is min(banked, target), and
+   at 20000 that min never bites, so it is plain expected points. The self-check's 564.4376 for six
+   ordinary dice is solved at exactly this cap and matches the uncapped Python engine. */
+const PPT_CAP=20000;
+let MODE_PTS=true;
+function target(){ return MODE_PTS ? PPT_CAP : Math.max(100,Math.min(20000,parseInt($("target").value,10)||2000)); }
 let SOLO=null, HEUR=null, SOLO_CAP=null;
 /* SOLO is a table of six of the same die - the honest "how good is this die" number, and what the dice
    table shows. HEUR is three of it beside three plain dice, and is what orders the search: a die is
@@ -891,7 +902,7 @@ $("search").addEventListener("click",async function(){
   }
   renderSets(scored);
   const cores=Math.max(1,parallel?ws.length:1);
-  if(done>50) MS_PER_SET=(Date.now()-sweep0)*cores/done;   // so the next estimate uses this machine
+  if(done>50){ MS_PER_SET=(Date.now()-sweep0)*cores/done; MS_CAP=cap; }   // so the next estimate uses this machine
   if(nn){ nn.wall=Date.now()-wall0; nn.how=how; nn.cap=cap; NNRUN=nn; renderNN(); }
   $("prog").textContent=(stopFlag?"stopped after ":(cut?"done \u2014 network skipped the rest after ":"done \u2014 "))+
     done.toLocaleString()+" of "+N.toLocaleString()+" sets searched ("+how+")"+
@@ -934,7 +945,7 @@ function renderNN(){
        row("sets opened",r.opened.toLocaleString()+" of "+r.N.toLocaleString()+
            " ("+(100*r.opened/r.N).toFixed(2)+"%)")+
        row("took",(r.wall/1000).toFixed(1)+" s on "+r.how+", against about "+
-           fmtDur(r.N*msPerSet()/Math.max(1,(r.how.split(" ")[0]|0)))+" exact")+
+           fmtDur(r.N*msPerSet(r.cap)/Math.max(1,(r.how.split(" ")[0]|0)))+" exact")+
        "</table></div>";
     h+="<p class='note'>"+(r.pruned
         ? "The rest were skipped because their guess plus the margin was still below the worst set on the board. That is a statistical guarantee, not a proof \u2014 untick the box for the proof."
@@ -957,20 +968,22 @@ $("nninfo").addEventListener("click",function(){
 /* How big is this search, and is it worth switching the network on? Counting sets needs no solving, so
    this can run on every keystroke. */
 const NN_MIN=5000;
-let MS_PER_SET=45;                            // replaced by the real figure after the first search
-function msPerSet(){ return MS_PER_SET; }
+/* Solve cost is close to linear in the target: 71 / 107 / 210 / 370 ms for six distinct dice at
+   2000 / 4000 / 10000 / 20000 fits 38 + target/60 within 3%. So a cost measured at one target carries
+   to another by that ratio - without it, switching to points per turn would understate by 5x. */
+let MS_PER_SET=45, MS_CAP=2000;               // replaced by the real figure after the first search
+function msPerSet(cap){ return MS_PER_SET*(38+cap/60)/(38+MS_CAP/60); }
 function sizeHint(){
   const counts=invEls.map(function(e){return Math.max(0,Math.min(6,parseInt(e.value,10)||0));});
   counts[NORMAL]=6;
   const n=countCandidates(counts), cores=Math.max(1,coresWanted());
-  let h=n.toLocaleString()+(n===1?" set":" sets")+" to try \u2014 about "+fmtDur(n*MS_PER_SET/cores)+" exact";
+  let h=n.toLocaleString()+(n===1?" set":" sets")+" to try \u2014 about "+fmtDur(n*msPerSet(target())/cores)+" exact";
   if(n>=NN_MIN && !$("nnon").checked) h+=". <b>Neural Network Accelerator</b> will cut that to seconds.";
   $("sizehint").innerHTML=h;
 }
 invEls.forEach(function(e){ e.addEventListener("input",sizeHint); });
 $("nnon").addEventListener("change",sizeHint);
 $("cores").addEventListener("change",sizeHint);
-sizeHint();
 function renderSets(scored){
   let h="<tr><th>#</th><th>Set</th><th class='n'>Avg / turn</th><th class='n'>Bust on 1st throw</th><th></th></tr>";
   scored.forEach(function(r,i){
@@ -1026,6 +1039,7 @@ onSetChange();
 
 $("cores").value=Math.max(1,Math.min(24,(navigator.hardwareConcurrency||4)-1));
 $("coreinfo").textContent="of "+(navigator.hardwareConcurrency||"?")+" — 1 = single-threaded";
+sizeHint();                                   // only now: before this the core count is blank and reads as 1
 $("cores").addEventListener("change",killPool);
 
 const solCache={};
@@ -1033,7 +1047,7 @@ $("advise").addEventListener("click",async function(){
   const btn=$("advise"); btn.disabled=true; $("prog2").textContent="solving…"; await yieldUI();
   const types=setEls.map(function(s){return CANON[parseInt(s.value,10)];});
   const mine=Math.max(0,parseInt($("myscore").value,10)||0);
-  const cap=Math.max(50,target()-mine);       // points you still need to win
+  const cap=MODE_PTS ? PPT_CAP : Math.max(50,target()-mine);   // points you still need to win
   const key=types.slice().sort(function(a,b){return a-b;}).join(",")+"@"+cap;
   if(!solCache[key]) solCache[key]=solve(types,cap);
   const sol=solCache[key];
@@ -1110,7 +1124,7 @@ function playMove(i){
     const mine=Math.max(0,parseInt($("myscore").value,10)||0)+o.total;
     $("myscore").value=String(mine);
     $("turnpts").value="0"; clearAll();
-    $("prog2").textContent = mine>=target()
+    $("prog2").textContent = !MODE_PTS && mine>=target()
       ? ("banked "+o.total+" — you are on "+mine+" and have won the match")
       : ("banked "+o.total+" — now on "+mine+", new turn");
   }
@@ -1127,10 +1141,24 @@ $("scoretbl").innerHTML="<tr><th>Combination</th><th class='n'>Score</th></tr>"+
   ["Straight 1-5",500],["Straight 2-6",750],["Full straight 1-6",1500]]
  .map(function(r){return "<tr><td>"+r[0]+"</td><td class='n'>"+r[1]+"</td></tr>";}).join("");
 
-$("target").addEventListener("change",function(){   // every cached solve is target-specific
+function targetChanged(){                    // every cached solve is target-specific
   SOLO=null; SOLO_CAP=null; for(const k in solCache) delete solCache[k];
   $("dicetbl").innerHTML=""; $("res1").classList.add("hide"); $("res2").classList.add("hide");
-});
+  sizeHint();
+}
+$("target").addEventListener("change",targetChanged);
+function setMode(pts){
+  if(MODE_PTS===pts) return;
+  MODE_PTS=pts;
+  $("modePts").classList.toggle("on",pts); $("modeMatch").classList.toggle("on",!pts);
+  $("targetwrap").classList.toggle("hide",pts); $("myscorewrap").classList.toggle("hide",pts);
+  $("modehint").textContent = pts
+    ? "the most points a turn banks on average. Switch to Match target when you are playing to win a game: points past the target don't help you, which changes score-or-pass calls near the end."
+    : "points past the target don't help you win, so this changes score-or-pass calls near the end, and can change which dice are best.";
+  targetChanged();
+}
+$("modePts").addEventListener("click",function(){ setMode(true); });
+$("modeMatch").addEventListener("click",function(){ setMode(false); });
 $("t3").addEventListener("click",function(){
   if($("dicetbl").innerHTML) return;
   $("dicetbl").innerHTML="<tr><td>solving…</td></tr>";
